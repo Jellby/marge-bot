@@ -175,6 +175,12 @@ def _parse_config(args):
         help='Only process MRs whose target branches match the given regular expression.\n',
     )
     parser.add_argument(
+        '--temp-branch',
+        type=str,
+        default="",
+        help='Temporary branch name for external merge requests (disabled if empty).\n',
+    )
+    parser.add_argument(
         '--debug',
         action='store_true',
         help='Debug logging (includes all HTTP requests etc).\n',
@@ -246,6 +252,7 @@ def main(args=None):
                 embargo=options.embargo,
                 ci_timeout=options.ci_timeout,
                 use_merge_strategy=options.use_merge_strategy,
+                temp_branch=options.temp_branch,
             ),
             batch=options.batch,
         )
