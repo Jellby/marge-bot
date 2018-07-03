@@ -186,6 +186,12 @@ def _parse_config(args):
         help='Create new pipeline if not up to date or not matching job-regexp.\n',
     )
     parser.add_argument(
+        '--temp-branch',
+        type=str,
+        default="",
+        help='Temporary branch name for external merge requests (disabled if empty).\n',
+    )
+    parser.add_argument(
         '--debug',
         action='store_true',
         help='Debug logging (includes all HTTP requests etc).\n',
@@ -259,6 +265,7 @@ def main(args=None):
                 use_merge_strategy=options.use_merge_strategy,
                 job_regexp=options.job_regexp,
                 create_pipeline=options.create_pipeline,
+                temp_branch=options.temp_branch,
             ),
             batch=options.batch,
         )

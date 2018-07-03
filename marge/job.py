@@ -5,7 +5,8 @@ import re
 from collections import namedtuple
 from datetime import datetime, timedelta
 
-from . import git
+from . import git, gitlab
+from .commit import Commit
 from .interval import IntervalUnion
 from .project import Project
 from .user import User
@@ -115,13 +116,17 @@ class MergeJob(object):
         return sha
 
     def get_mr_ci_status(self, merge_request, commit_sha=None):
+        temp_branch = self.opts.temp_branch
         if commit_sha is None:
             commit_sha = merge_request.sha
-        pipelines = Pipeline.pipelines_by_branch(
-            merge_request.source_project_id,
-            merge_request.source_branch,
-            self._api,
-        )
+        if temp_branch and merge_request.source_project_id != self._project.id:
+            pid = self._project.id
+            ref = temp_branch
+            self.update_temp_branch(merge_request, commit_sha)
+        else:
+            pid = merge_request.source_project_id
+            ref = merge_request.source_branch
+        pipelines = Pipeline.pipelines_by_branch(pid, ref, self._api)
         current_pipeline = next(iter(pipelines), None)
         create_pipeline = self.opts.create_pipeline
 
@@ -139,7 +144,7 @@ class MergeJob(object):
                     raise CannotMerge('CI doesn\'t contain the required jobs.')
         else:
             message = 'No pipeline listed for {sha} on branch {branch}.'.format(
-                sha=commit_sha, branch=merge_request.source_branch
+                sha=commit_sha, branch=ref
             )
             log.warning(message)
             ci_status = None
@@ -243,7 +248,7 @@ class MergeJob(object):
             remote = 'source'
             remote_url = source_project.ssh_url_to_repo
             self._repo.fetch(
-                remote=remote,
+                remote_name=remote,
                 remote_url=remote_url,
             )
         return source_project, remote_url, remote
@@ -330,6 +335,43 @@ class MergeJob(object):
             else:
                 assert source_repo_url is not None
 
+    def update_temp_branch(self, merge_request, commit_sha):
+        api = self._api
+        project_id = self._project.id
+        temp_branch = self.opts.temp_branch
+        waiting_time_in_secs = 30
+
+        try:
+            sha_branch = Commit.last_on_branch(project_id, temp_branch, api).id
+        except gitlab.NotFound:
+            sha_branch = None
+        if sha_branch != commit_sha:
+            log.info('Setting up %s in target project', temp_branch)
+            self.delete_temp_branch(merge_request.source_project_id)
+            self._project.create_branch(temp_branch, commit_sha, api)
+            self._project.protect_branch(temp_branch, api)
+            merge_request.comment(
+                ('The temporary branch **{branch}** was updated to [{sha:.8}](../commit/{sha}) ' +
+                 'and local pipelines will be used.').format(
+                    branch=temp_branch, sha=commit_sha
+                )
+            )
+
+            time.sleep(waiting_time_in_secs)
+
+    def delete_temp_branch(self, source_project_id):
+        temp_branch = self.opts.temp_branch
+
+        if temp_branch and source_project_id != self._project.id:
+            try:
+                self._project.unprotect_branch(temp_branch, self._api)
+            except gitlab.ApiError:
+                pass
+            try:
+                self._project.delete_branch(temp_branch, self._api)
+            except gitlab.ApiError:
+                pass
+
 
 def _get_reviewer_names_and_emails(approvals, api):
     """Return a list ['A. Prover <a.prover@example.com', ...]` for `merge_request.`"""
@@ -349,6 +391,7 @@ JOB_OPTIONS = [
     'use_merge_strategy',
     'job_regexp',
     'create_pipeline',
+    'temp_branch',
 ]
 
 
@@ -364,7 +407,7 @@ class MergeJobOptions(namedtuple('MergeJobOptions', JOB_OPTIONS)):
             cls, *,
             add_tested=False, add_part_of=False, add_reviewers=False, reapprove=False,
             approval_timeout=None, embargo=None, ci_timeout=None, use_merge_strategy=False,
-            job_regexp=re.compile('.*'), create_pipeline=False
+            job_regexp=re.compile('.*'), create_pipeline=False, temp_branch=""
     ):
         approval_timeout = approval_timeout or timedelta(seconds=0)
         embargo = embargo or IntervalUnion.empty()
@@ -380,6 +423,7 @@ class MergeJobOptions(namedtuple('MergeJobOptions', JOB_OPTIONS)):
             use_merge_strategy=use_merge_strategy,
             job_regexp=job_regexp,
             create_pipeline=create_pipeline,
+            temp_branch=temp_branch,
         )
 
 
