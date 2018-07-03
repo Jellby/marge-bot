@@ -152,12 +152,12 @@ class MergeJob(object):
                 trigger = True
 
         if trigger:
-            self.trigger_pipeline(merge_request, message)
+            self.trigger_pipeline(merge_request, pid, ref, message)
             ci_status = None
 
         return ci_status
 
-    def trigger_pipeline(self, merge_request, message=''):
+    def trigger_pipeline(self, merge_request, project_id, branch, message=''):
         if merge_request.triggered(self._user.id):
             raise CannotMerge(
                 ('{message}\n\nI don\'t know what else I can do. ' +
@@ -165,11 +165,7 @@ class MergeJob(object):
                     message=message
                 )
             )
-        new_pipeline = Pipeline.create(
-            merge_request.source_project_id,
-            merge_request.source_branch,
-            self._api,
-        )
+        new_pipeline = Pipeline.create(project_id, branch, self._api)
         if new_pipeline:
             log.info('New pipeline created')
             merge_request.comment(
