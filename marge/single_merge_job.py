@@ -71,6 +71,9 @@ class SingleMergeJob(MergeJob):
                 time.sleep(2)
                 if self.opts.temp_branch and source_project is not self._project:
                     trust = False
+
+            self.ensure_mergeable_mr(merge_request)
+
             try:
                 merge_request.accept(remove_branch=True, sha=actual_sha, trust_pipeline=trust,
                                      project=self._project)
