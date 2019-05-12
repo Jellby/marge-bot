@@ -33,7 +33,7 @@ class Project(gitlab.Resource):
                 '/projects',
                 {'membership': True, 'with_merge_requests_enabled': True},
             ))
-        except gitlab.InternalServerError:
+        except (gitlab.InternalServerError, gitlab.TooManyRequests):
             log.warning('Internal server error from GitLab! Ignoring...')
             projects_info = []
 

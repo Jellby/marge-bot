@@ -38,12 +38,12 @@ class MergeRequest(gitlab.Resource):
                 '/projects/{project_id}/merge_requests'.format(project_id=project_id),
                 {'state': 'opened', 'order_by': 'created_at', 'sort': 'asc'},
             ))
-        except gitlab.InternalServerError:
+        except (gitlab.InternalServerError, gitlab.TooManyRequests):
             log.warning('Internal server error from GitLab! Ignoring...')
             all_merge_request_infos = []
         my_merge_request_infos = [
             mri for mri in all_merge_request_infos
-            if (mri['assignee'] or {}).get('id') == user_id
+            if user_id in [mra.get('id') for mra in mri['assignees']]
         ]
 
         return [cls(api, merge_request_info) for merge_request_info in my_merge_request_infos]
@@ -68,6 +68,11 @@ class MergeRequest(gitlab.Resource):
     def assignee_id(self):
         assignee = self.info['assignee'] or {}
         return assignee.get('id')
+
+    @property
+    def assignee_ids(self):
+        assignees = self.info['assignees'] or []
+        return [a.get('id') for a in assignees]
 
     @property
     def author_id(self):
@@ -137,14 +142,15 @@ class MergeRequest(gitlab.Resource):
             {'state_event': 'close'},
         ))
 
-    def assign_to(self, user_id):
+    def assign_to(self, user_ids):
         return self._api.call(PUT(
             '/projects/{0.project_id}/merge_requests/{0.iid}'.format(self),
-            {'assignee_id': user_id},
+            {'assignee_ids': user_ids},
         ))
 
-    def unassign(self):
-        return self.assign_to(None)
+    def unassign(self, user_id):
+        assignees = [x for x in merge_request.assignee_ids if x != user_id]
+        return self.assign_to(assignees)
 
     def fetch_approvals(self):
         # 'id' needed for for GitLab 9.2.2 hack (see Approvals.refetch_info())
@@ -164,3 +170,10 @@ class MergeRequest(gitlab.Resource):
         message = 'I created a new pipeline for [{sha:.8s}]'.format(sha=self.sha)
         my_comments = [c['body'] for c in comments if c['author']['id'] == user_id]
         return any(message in c for c in my_comments)
+
+    def is_assigned_to(self, user_id):
+        if self.assignee_id == user_id:
+            return True
+        if user_id in self.assignee_ids:
+            return True
+        return False

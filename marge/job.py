@@ -64,7 +64,7 @@ class MergeJob(object):
         if self.during_merge_embargo():
             raise SkipMerge('Merge embargo!')
 
-        if self._user.id != merge_request.assignee_id:
+        if not merge_request.is_assigned_to(self._user.id):
             raise SkipMerge('It is not assigned to me anymore!')
 
     def add_trailers(self, merge_request):
@@ -119,6 +119,9 @@ class MergeJob(object):
         temp_branch = self.opts.temp_branch
         if commit_sha is None:
             commit_sha = merge_request.sha
+        merge_request.refetch_info()
+        if (merge_request.sha != commit_sha):
+            raise CannotMerge('Someone pushed to branch while I was waiting for CI to pass.')
         if temp_branch and merge_request.source_project_id != self._project.id:
             pid = self._project.id
             ref = temp_branch
@@ -126,8 +129,16 @@ class MergeJob(object):
         else:
             pid = merge_request.source_project_id
             ref = merge_request.source_branch
-        pipelines = Pipeline.pipelines_by_branch(pid, ref, self._api)
+        mr_pipeline_ref = 'refs/merge-requests/{}/head'.format(merge_request.iid)
+        pipelines = Pipeline.pipelines_by_branch(pid, ref, self._api, ref=mr_pipeline_ref)
         current_pipeline = next(iter(pipelines), None)
+        if not current_pipeline or current_pipeline.sha != commit_sha:
+            message = 'No pipeline listed for {sha} on MR {iid}.'.format(
+                sha=commit_sha, iid=merge_request.iid
+            )
+            log.warning(message)
+            pipelines = Pipeline.pipelines_by_branch(pid, ref, self._api)
+            current_pipeline = next(iter(pipelines), None)
         create_pipeline = self.opts.create_pipeline
 
         trigger = False
@@ -181,14 +192,19 @@ class MergeJob(object):
 
     def wait_for_ci_to_pass(self, merge_request, commit_sha=None):
         time_0 = datetime.utcnow()
-        waiting_time_in_secs = 10
+        waiting_time_in_secs = 30
 
         if commit_sha is None:
             commit_sha = merge_request.sha
 
         log.info('Waiting for CI to pass for MR !%s', merge_request.iid)
         while datetime.utcnow() - time_0 < self._options.ci_timeout:
-            ci_status = self.get_mr_ci_status(merge_request, commit_sha=commit_sha)
+            try:
+                ci_status = self.get_mr_ci_status(merge_request, commit_sha=commit_sha)
+            except (gitlab.InternalServerError, gitlab.TooManyRequests):
+                log.warning('Internal server error from GitLab! Ignoring...')
+                ci_status = None
+
             if ci_status == 'success':
                 log.info('CI for MR !%s passed', merge_request.iid)
                 return
@@ -211,9 +227,10 @@ class MergeJob(object):
         log.info('Unassigning from MR !%s', merge_request.iid)
         author_id = merge_request.author_id
         if author_id != self._user.id:
-            merge_request.assign_to(author_id)
+            assignees = [author_id if x == self._user.id else x for x in merge_request.assignee_ids]
+            merge_request.assign_to(assignees)
         else:
-            merge_request.unassign()
+            merge_request.unassign(self._user.id)
 
     def during_merge_embargo(self):
         now = datetime.utcnow()
@@ -234,7 +251,14 @@ class MergeJob(object):
                 log.debug('Approvals haven\'t reset yet, sleeping for %s secs', waiting_time_in_secs)
                 time.sleep(waiting_time_in_secs)
             if not sufficient_approvals():
-                approvals.reapprove()
+                try:
+                    approvals.reapprove()
+                except gitlab.Forbidden:
+                    log.info('Impersonation forbidden. Approving with own id')
+                    try:
+                        approvals.approve()
+                    except gitlab.Unauthorized:
+                        raise CannotMerge('Sorry, I need a human to approve this MR.')
 
     def fetch_source_project(self, merge_request):
         remote = 'origin'
@@ -252,10 +276,13 @@ class MergeJob(object):
     def get_source_project(self, merge_request):
         source_project = self._project
         if merge_request.source_project_id != self._project.id:
-            source_project = Project.fetch_by_id(
-                merge_request.source_project_id,
-                api=self._api,
-            )
+            try:
+                source_project = Project.fetch_by_id(
+                    merge_request.source_project_id,
+                    api=self._api,
+                )
+            except gitlab.NotFound:
+                raise CannotMerge('I cannot find the source project. Do I have access?')
         return source_project
 
     def fuse(self, source, target, source_repo_url=None, local=False):
@@ -309,7 +336,8 @@ class MergeJob(object):
                 source_name = 'source/'
             source_sha = repo.get_commit_hash(source_name + source_branch)
             if rewritten_sha != source_sha:
-                repo.push(source_branch, source_repo_url=source_repo_url, force=True)
+                repo.push(source_branch, source_repo_url=source_repo_url, force=True, option='ci.skip')
+                time.sleep(30)
             changes_pushed = True
         except git.GitError:
             if not branch_updated:
