@@ -36,10 +36,14 @@ class MergeRequest(gitlab.Resource):
 
     @classmethod
     def fetch_all_open_for_user(cls, project_id, user_id, api, merge_order):
-        all_merge_request_infos = api.collect_all_pages(GET(
-            '/projects/{project_id}/merge_requests'.format(project_id=project_id),
-            {'state': 'opened', 'order_by': merge_order, 'sort': 'asc'},
-        ))
+        try:
+            all_merge_request_infos = api.collect_all_pages(GET(
+                '/projects/{project_id}/merge_requests'.format(project_id=project_id),
+                {'state': 'opened', 'order_by': merge_order, 'sort': 'asc'},
+            ))
+        except gitlab.InternalServerError:
+            log.warning('Internal server error from GitLab! Ignoring...')
+            all_merge_request_infos = []
         my_merge_request_infos = [
             mri for mri in all_merge_request_infos
             if ((mri.get('assignee', {}) or {}).get('id') == user_id) or

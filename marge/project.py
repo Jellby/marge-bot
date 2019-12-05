@@ -40,10 +40,14 @@ class Project(gitlab.Resource):
         if use_min_access_level:
             projects_kwargs["min_access_level"] = int(AccessLevel.developer)
 
-        projects_info = api.collect_all_pages(GET(
-            '/projects',
-            projects_kwargs,
-        ))
+        try:
+            projects_info = api.collect_all_pages(GET(
+                '/projects',
+                projects_kwargs,
+            ))
+        except gitlab.InternalServerError:
+            log.warning('Internal server error from GitLab! Ignoring...')
+            projects_info = []
 
         def project_seems_ok(project_info):
             # A bug in at least GitLab 9.3.5 would make GitLab not report permissions after
