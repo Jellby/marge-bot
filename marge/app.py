@@ -204,6 +204,11 @@ def _parse_config(args):
         help='Only process MRs whose source branches match the given regular expression.\n',
     )
     parser.add_argument(
+        '--no-squash',
+        action='store_true',
+        help='Disallow auto-squash merge requests.\n',
+    )
+    parser.add_argument(
         '--debug',
         action='store_true',
         help='Debug logging (includes all HTTP requests etc).\n',
