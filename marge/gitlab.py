@@ -52,6 +52,7 @@ class Api:
             406: NotAcceptable,
             409: Conflict,
             422: Unprocessable,
+            429: TooManyRequests,
             500: InternalServerError,
         }
 
@@ -190,6 +191,10 @@ class Conflict(ApiError):
 
 
 class Unprocessable(ApiError):
+    pass
+
+
+class TooManyRequests(ApiError):
     pass
 
 

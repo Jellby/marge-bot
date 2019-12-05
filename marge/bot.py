@@ -23,9 +23,9 @@ class Bot:
         opts = config.merge_opts
 
         if not user.is_admin:
-            assert not opts.reapprove, (
-                "{0.username} is not an admin, can't impersonate!".format(user)
-            )
+            # assert not opts.reapprove, (
+            #     "{0.username} is not an admin, can't impersonate!".format(user)
+            # )
             assert not opts.add_reviewers, (
                 "{0.username} is not an admin, can't lookup Reviewed-by: email addresses ".format(user)
             )
@@ -50,8 +50,9 @@ class Bot:
         return self._api
 
     def _run(self, repo_manager):
-        time_to_sleep_between_projects_in_secs = 1
-        min_time_to_sleep_after_iterating_all_projects_in_secs = 30
+        time_to_sleep_between_projects_in_secs = 10
+        min_time_to_sleep_after_iterating_all_projects_in_secs = 60
+        self.user.set_status('beach_umbrella', 'Waiting for something to do', self.api)
         while True:
             projects = self._get_projects()
             self._process_projects(

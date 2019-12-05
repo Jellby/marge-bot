@@ -145,6 +145,10 @@ class MergeJob:
         if commit_sha is None:
             commit_sha = merge_request.sha
 
+        merge_request.refetch_info()
+        if merge_request.sha != commit_sha:
+            raise CannotMerge('Someone pushed to branch while I was waiting for CI to pass.')
+
         if temp_branch and merge_request.source_project_id != merge_request.target_project.id:
             ref = temp_branch
             self.update_temp_branch(merge_request, commit_sha)
@@ -168,6 +172,20 @@ class MergeJob:
                 self._api,
             )
         current_pipeline = next(iter(pipeline for pipeline in pipelines if pipeline.sha == commit_sha), None)
+        if not current_pipeline:
+            message = 'No pipeline listed for {sha} on MR {iid}.'.format(
+                sha=commit_sha, iid=merge_request.iid
+            )
+            log.warning(message)
+            ref = merge_request.source_branch
+            pipelines = Pipeline.pipelines_by_branch(
+                merge_request.target_project_id,
+                ref,
+                self._api,
+            )
+            current_pipeline = next(
+                iter(pipeline for pipeline in pipelines if pipeline.sha == commit_sha), None
+            )
         create_pipeline = self.opts.create_pipeline
 
         trigger = False
@@ -226,14 +244,19 @@ class MergeJob:
 
     def wait_for_ci_to_pass(self, merge_request, commit_sha=None):
         time_0 = datetime.utcnow()
-        waiting_time_in_secs = 10
+        waiting_time_in_secs = 30
 
         if commit_sha is None:
             commit_sha = merge_request.sha
 
         log.info('Waiting for CI to pass for MR !%s', merge_request.iid)
         while datetime.utcnow() - time_0 < self._options.ci_timeout:
-            ci_status = self.get_mr_ci_status(merge_request, commit_sha=commit_sha)
+            try:
+                ci_status = self.get_mr_ci_status(merge_request, commit_sha=commit_sha)
+            except (gitlab.InternalServerError, gitlab.TooManyRequests):
+                log.warning('Internal server error from GitLab! Ignoring...')
+                ci_status = None
+
             if ci_status == 'success':
                 log.info('CI for MR !%s passed', merge_request.iid)
                 return
@@ -260,9 +283,11 @@ class MergeJob:
         log.info('Unassigning from MR !%s', merge_request.iid)
         author_id = merge_request.author_id
         if author_id != self._user.id:
-            merge_request.assign_to(author_id)
+            assignees = [author_id if x == self._user.id else x for x in merge_request.assignee_ids]
+            assignees = list(set(assignees))
+            merge_request.assign_to(assignees)
         else:
-            merge_request.unassign()
+            merge_request.unassign(self._user.id)
 
     def during_merge_embargo(self):
         now = datetime.utcnow()
@@ -285,7 +310,14 @@ class MergeJob:
                 time.sleep(waiting_time_in_secs)
                 iterations -= 1
             if not sufficient_approvals():
-                approvals.reapprove()
+                try:
+                    approvals.reapprove()
+                except gitlab.Forbidden:
+                    log.info('Impersonation forbidden. Approving with own id')
+                    try:
+                        approvals.approve()
+                    except gitlab.Unauthorized:
+                        raise CannotMerge('Sorry, I need a human to approve this MR.')
 
     def fetch_source_project(self, merge_request):
         remote = 'origin'
@@ -303,10 +335,13 @@ class MergeJob:
     def get_source_project(self, merge_request):
         source_project = self._project
         if merge_request.source_project_id != self._project.id:
-            source_project = Project.fetch_by_id(
-                merge_request.source_project_id,
-                api=self._api,
-            )
+            try:
+                source_project = Project.fetch_by_id(
+                    merge_request.source_project_id,
+                    api=self._api,
+                )
+            except gitlab.NotFound:
+                raise CannotMerge('I cannot find the source project. Do I have access?')
         return source_project
 
     def get_target_project(self, merge_request):
@@ -408,6 +443,7 @@ class MergeJob:
                 merge_request.source_branch,
                 source_repo_url=source_repo_url,
                 force=True,
+                option='ci.skip',
             )
         except git.GitError:
             def fetch_remote_branch():

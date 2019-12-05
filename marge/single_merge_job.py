@@ -18,6 +18,7 @@ class SingleMergeJob(MergeJob):
         merge_request = self._merge_request
 
         log.info('Processing !%s - %r', merge_request.iid, merge_request.title)
+        self._user.set_status('gear', 'Processing !{}'.format(merge_request.iid), self._api)
 
         try:
             approvals = merge_request.fetch_approvals()
@@ -39,6 +40,7 @@ class SingleMergeJob(MergeJob):
             merge_request.comment("I'm broken on the inside, please somebody fix me... :cry:")
             self.unassign_from_mr(merge_request)
             raise
+        self._user.set_status('beach_umbrella', 'Waiting for something to do', self._api)
 
     def update_merge_request_and_accept(self, approvals):
         api = self._api

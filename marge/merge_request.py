@@ -41,7 +41,7 @@ class MergeRequest(gitlab.Resource):
                 '/projects/{project_id}/merge_requests'.format(project_id=project_id),
                 {'state': 'opened', 'order_by': merge_order, 'sort': 'asc'},
             ))
-        except gitlab.InternalServerError:
+        except (gitlab.InternalServerError, gitlab.TooManyRequests):
             log.warning('Internal server error from GitLab! Ignoring...')
             all_merge_request_infos = []
         my_merge_request_infos = [
@@ -175,14 +175,15 @@ class MergeRequest(gitlab.Resource):
             {'state_event': 'close'},
         ))
 
-    def assign_to(self, user_id):
+    def assign_to(self, user_ids):
         return self._api.call(PUT(
             '/projects/{0.project_id}/merge_requests/{0.iid}'.format(self),
-            {'assignee_id': user_id},
+            {'assignee_ids': tuple(user_ids)},
         ))
 
-    def unassign(self):
-        return self.assign_to(0)
+    def unassign(self, user_id):
+        assignees = [x for x in self.assignee_ids if x != user_id]
+        return self.assign_to(assignees)
 
     def fetch_approvals(self):
         # 'id' needed for for GitLab 9.2.2 hack (see Approvals.refetch_info())

@@ -45,7 +45,7 @@ class Project(gitlab.Resource):
                 '/projects',
                 projects_kwargs,
             ))
-        except gitlab.InternalServerError:
+        except (gitlab.InternalServerError, gitlab.TooManyRequests):
             log.warning('Internal server error from GitLab! Ignoring...')
             projects_info = []
 

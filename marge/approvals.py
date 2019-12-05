@@ -59,3 +59,13 @@ class Approvals(gitlab.Resource):
 
         for uid in self.approver_ids:
             self._api.call(POST(approve_url), sudo=uid)
+
+    def approve(self):
+        """Approve with marge's own id, as a fallback"""
+        if self._api.version().release >= (9, 2, 2):
+            approve_url = '/projects/{0.project_id}/merge_requests/{0.iid}/approve'.format(self)
+        else:
+            # GitLab botched the v4 api before 9.2.3
+            approve_url = '/projects/{0.project_id}/merge_requests/{0.id}/approve'.format(self)
+
+        self._api.call(POST(approve_url))
