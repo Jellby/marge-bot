@@ -221,6 +221,11 @@ def _parse_config(args):
         help='Create new pipeline if not up to date or not matching job-regexp.\n',
     )
     parser.add_argument(
+        '--no-squash',
+        action='store_true',
+        help='Disallow auto-squash merge requests.\n',
+    )
+    parser.add_argument(
         '--debug',
         action='store_true',
         help='Debug logging (includes all HTTP requests etc).\n',

@@ -45,10 +45,16 @@ class MergeJob:
         if merge_request.work_in_progress:
             raise CannotMerge("Sorry, I can't merge requests marked as Work-In-Progress!")
 
-        if merge_request.squash and self._options.requests_commit_tagging:
-            raise CannotMerge(
-                "Sorry, merging requests marked as auto-squash would ruin my commit tagging!"
-            )
+        if merge_request.squash:
+            if self._options.no_squash:
+                raise CannotMerge(
+                    "Sorry, I cannot accept auto-squash merge requests!\n" +
+                    "Please disable the \"Squash commits\" box."
+                )
+            if self._options.requests_commit_tagging:
+                raise CannotMerge(
+                    "Sorry, merging requests marked as auto-squash would ruin my commit tagging!"
+                )
 
         approvals = merge_request.fetch_approvals()
         if not approvals.sufficient:
@@ -506,6 +512,7 @@ JOB_OPTIONS = [
     'job_regexp',
     'create_pipeline',
     'temp_branch',
+    'no_squash',
 ]
 
 
@@ -521,7 +528,8 @@ class MergeJobOptions(namedtuple('MergeJobOptions', JOB_OPTIONS)):
             cls, *,
             add_tested=False, add_part_of=False, add_reviewers=False, reapprove=False,
             approval_timeout=None, embargo=None, ci_timeout=None, fusion=Fusion.rebase,
-            job_regexp=re.compile(''), create_pipeline=False, temp_branch=""
+            job_regexp=re.compile(''), create_pipeline=False, temp_branch="",
+            no_squash=False,
     ):
         approval_timeout = approval_timeout or timedelta(seconds=0)
         embargo = embargo or IntervalUnion.empty()
@@ -538,6 +546,7 @@ class MergeJobOptions(namedtuple('MergeJobOptions', JOB_OPTIONS)):
             job_regexp=job_regexp,
             create_pipeline=create_pipeline,
             temp_branch=temp_branch,
+            no_squash=no_squash,
         )
 
 
