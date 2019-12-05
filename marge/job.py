@@ -384,7 +384,7 @@ class MergeJob:
     ):
         if self._options.fusion is Fusion.gitlab_rebase:
             self.synchronize_using_gitlab_rebase(merge_request)
-        else:
+        elif branch_was_modified:
             self.push_force_to_mr(
                 merge_request,
                 branch_was_modified,
