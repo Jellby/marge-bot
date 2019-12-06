@@ -176,12 +176,19 @@ class MergeRequest(gitlab.Resource):
         ))
 
     def assign_to(self, user_ids):
+        if isinstance(user_ids, list):
+            return self._api.call(PUT(
+                '/projects/{0.project_id}/merge_requests/{0.iid}'.format(self),
+                {'assignee_ids': user_ids},
+            ))
         return self._api.call(PUT(
             '/projects/{0.project_id}/merge_requests/{0.iid}'.format(self),
-            {'assignee_ids': tuple(user_ids)},
+            {'assignee_id': user_ids},
         ))
 
-    def unassign(self, user_id):
+    def unassign(self, user_id=None):
+        if user_id is None:
+            return self.assign_to(0)
         assignees = [x for x in self.assignee_ids if x != user_id]
         return self.assign_to(assignees)
 

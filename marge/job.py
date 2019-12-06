@@ -145,9 +145,10 @@ class MergeJob:
         if commit_sha is None:
             commit_sha = merge_request.sha
 
-        merge_request.refetch_info()
-        if merge_request.sha != commit_sha:
-            raise CannotMerge('Someone pushed to branch while I was waiting for CI to pass.')
+        if self._user.username == 'MargePT2':
+            merge_request.refetch_info()
+            if merge_request.sha != commit_sha:
+                raise CannotMerge('Someone pushed to branch while I was waiting for CI to pass.')
 
         if temp_branch and merge_request.source_project_id != merge_request.target_project.id:
             ref = temp_branch
@@ -283,11 +284,17 @@ class MergeJob:
         log.info('Unassigning from MR !%s', merge_request.iid)
         author_id = merge_request.author_id
         if author_id != self._user.id:
-            assignees = [author_id if x == self._user.id else x for x in merge_request.assignee_ids]
-            assignees = list(set(assignees))
-            merge_request.assign_to(assignees)
+            if self._user.username == 'MargePT2':
+                assignees = [author_id if x == self._user.id else x for x in merge_request.assignee_ids]
+                assignees = list(set(assignees))
+                merge_request.assign_to(assignees)
+            else:
+                merge_request.assign_to(author_id)
         else:
-            merge_request.unassign(self._user.id)
+            if self._user.username == 'MargePT2':
+                merge_request.unassign(self._user.id)
+            else:
+                merge_request.unassign()
 
     def during_merge_embargo(self):
         now = datetime.utcnow()
