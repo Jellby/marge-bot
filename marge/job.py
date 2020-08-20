@@ -42,6 +42,9 @@ class MergeJob:
         log.info('Ensuring MR !%s is mergeable', merge_request.iid)
         log.debug('Ensuring MR %r is mergeable', merge_request)
 
+        if self._user.id not in merge_request.assignee_ids:
+            raise SkipMerge('It is not assigned to me anymore!')
+
         if merge_request.work_in_progress:
             raise CannotMerge("Sorry, I can't merge requests marked as Work-In-Progress!")
 
@@ -71,9 +74,6 @@ class MergeJob:
 
         if self.during_merge_embargo():
             raise SkipMerge('Merge embargo!')
-
-        if self._user.id not in merge_request.assignee_ids:
-            raise SkipMerge('It is not assigned to me anymore!')
 
     def add_trailers(self, merge_request):
 
@@ -150,28 +150,19 @@ class MergeJob:
             if merge_request.sha != commit_sha:
                 raise CannotMerge('Someone pushed to branch while I was waiting for CI to pass.')
 
-        if temp_branch and merge_request.source_project_id != merge_request.target_project.id:
+        if temp_branch and merge_request.source_project_id != merge_request.target_project_id:
             ref = temp_branch
+            pid = merge_request.target_project_id
             self.update_temp_branch(merge_request, commit_sha)
-            pipelines = Pipeline.pipelines_by_branch(
-                merge_request.target_project.id,
-                ref,
-                self._api,
-            )
+            pipelines = Pipeline.pipelines_by_branch(pid, ref, self._api)
         elif self._api.version().release >= (10, 5, 0):
             ref = merge_request.iid
-            pipelines = Pipeline.pipelines_by_merge_request(
-                merge_request.target_project_id,
-                ref,
-                self._api,
-            )
+            pid = merge_request.target_project_id
+            pipelines = Pipeline.pipelines_by_merge_request(pid, ref, self._api)
         else:
             ref = merge_request.source_branch
-            pipelines = Pipeline.pipelines_by_branch(
-                merge_request.source_project_id,
-                ref,
-                self._api,
-            )
+            pid = merge_request.source_project_id
+            pipelines = Pipeline.pipelines_by_branch(pid, ref, self._api)
         current_pipeline = next(iter(pipeline for pipeline in pipelines if pipeline.sha == commit_sha), None)
         if not current_pipeline:
             message = 'No pipeline listed for {sha} on MR {iid}.'.format(
@@ -212,12 +203,12 @@ class MergeJob:
                 trigger = True
 
         if trigger:
-            self.trigger_pipeline(merge_request, message)
+            self.trigger_pipeline(merge_request, pid, ref, message)
             ci_status = None
 
         return ci_status
 
-    def trigger_pipeline(self, merge_request, message=''):
+    def trigger_pipeline(self, merge_request, project_id, branch, message=''):
         if merge_request.triggered(self._user.id):
             raise CannotMerge(
                 ('{message}\n\nI don\'t know what else I can do. ' +
@@ -225,11 +216,7 @@ class MergeJob:
                     message=message
                 )
             )
-        new_pipeline = Pipeline.create(
-            merge_request.source_project_id,
-            merge_request.source_branch,
-            self._api,
-        )
+        new_pipeline = Pipeline.create(project_id, branch, merge_request, self._api)
         if new_pipeline:
             log.info('New pipeline created')
             merge_request.comment(
@@ -274,6 +261,10 @@ class MergeJob:
 
             if ci_status not in ('pending', 'running'):
                 log.warning('Suspicious CI status: %r', ci_status)
+
+            merge_request.refetch_info()
+            if self._user.id not in merge_request.assignee_ids:
+                return
 
             log.debug('Waiting for %s secs before polling CI status again', waiting_time_in_secs)
             time.sleep(waiting_time_in_secs)
@@ -463,6 +454,9 @@ class MergeJob:
             if branch_was_modified and fetch_remote_branch().protected:
                 raise CannotMerge("Sorry, I can't modify protected branches!")
 
+            change_type = "merged" if self.opts.fusion == Fusion.merge else "rebased"
+            raise CannotMerge('Failed to push %s changes, check my logs!' % change_type)
+
     def update_temp_branch(self, merge_request, commit_sha):
         temp_branch = self.opts.temp_branch
         waiting_time_in_secs = 30
@@ -497,9 +491,6 @@ class MergeJob:
                 self._project.delete_branch(temp_branch, self._api)
             except gitlab.ApiError:
                 pass
-
-            change_type = "merged" if self.opts.fusion == Fusion.merge else "rebased"
-            raise CannotMerge('Failed to push %s changes, check my logs!' % change_type)
 
     def synchronize_using_gitlab_rebase(self, merge_request, expected_sha=None):
         expected_sha = expected_sha or self._repo.get_commit_hash()

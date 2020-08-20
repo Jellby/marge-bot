@@ -34,22 +34,43 @@ class Pipeline(gitlab.Resource):
     @classmethod
     def pipelines_by_merge_request(cls, project_id, merge_request_iid, api):
         """Fetch all pipelines for a merge request in descending order of pipeline ID."""
+        # this API cannot be trusted yet
+        #pipelines_info = api.call(GET(
+        #    '/projects/{project_id}/merge_requests/{merge_request_iid}/pipelines'.format(
+        #        project_id=project_id, merge_request_iid=merge_request_iid,
+        #    )
+        #))
         pipelines_info = api.call(GET(
-            '/projects/{project_id}/merge_requests/{merge_request_iid}/pipelines'.format(
+            '/projects/{project_id}/pipelines'.format(
                 project_id=project_id, merge_request_iid=merge_request_iid,
-            )
+            ),
+            {
+                'ref': 'refs/merge-requests/{}/head'.format(merge_request_iid),
+            }
         ))
         pipelines_info.sort(key=lambda pipeline_info: pipeline_info['id'], reverse=True)
+        pipelines_info.sort(key=lambda pipeline_info:
+            0 if pipeline_info['ref'].startswith('ref/merge_requests') else 1)
         return [cls(api, pipeline_info, project_id) for pipeline_info in pipelines_info]
 
     @classmethod
-    def create(cls, project_id, ref, api):
+    def create(cls, project_id, ref, merge_request, api):
         try:
             pipeline_info = {}
-            api.call(POST(
-                '/projects/{project_id}/pipeline'.format(project_id=project_id), {'ref': ref}),
-                response_json=pipeline_info
-            )
+            if ((merge_request.source_project_id == project_id) and
+                (merge_request.source_branch == ref)):
+                api.call(POST(
+                    '/projects/{project_id}/merge_requests/{mr_id}/pipelines'.format(
+                        project_id=project_id,
+                        mr_id=merge_request.iid,
+                    )),
+                    response_json=pipeline_info
+                )
+            else:
+                api.call(POST(
+                    '/projects/{project_id}/pipeline'.format(project_id=project_id), {'ref': ref}),
+                    response_json=pipeline_info
+                )
             return cls(api, pipeline_info, project_id)
         except gitlab.ApiError:
             return None
