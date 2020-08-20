@@ -14,10 +14,7 @@ class Approvals(gitlab.Resource):
             # GitLab botched the v4 api before 9.2.3
             approver_url = '/projects/{0.project_id}/merge_requests/{0.id}/approvals'.format(self)
 
-        if gitlab_version.is_ee:
-            self._info = self._api.call(GET(approver_url))
-        else:
-            self._info = dict(self._info, approvals_left=0, approved_by=[])
+        self._info = self._api.call(GET(approver_url))
 
     @property
     def iid(self):
