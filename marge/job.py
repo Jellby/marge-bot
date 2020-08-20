@@ -552,6 +552,7 @@ JOB_OPTIONS = [
     'embargo',
     'ci_timeout',
     'fusion',
+    'use_no_ff_batches',
     'job_regexp',
     'create_pipeline',
     'temp_branch',
@@ -571,6 +572,7 @@ class MergeJobOptions(namedtuple('MergeJobOptions', JOB_OPTIONS)):
             cls, *,
             add_tested=False, add_part_of=False, add_reviewers=False, reapprove=False,
             approval_timeout=None, embargo=None, ci_timeout=None, fusion=Fusion.rebase,
+            use_no_ff_batches=False,
             job_regexp=re.compile(''), create_pipeline=False, temp_branch="",
             no_squash=False,
     ):
@@ -586,6 +588,7 @@ class MergeJobOptions(namedtuple('MergeJobOptions', JOB_OPTIONS)):
             embargo=embargo,
             ci_timeout=ci_timeout,
             fusion=fusion,
+            use_no_ff_batches=use_no_ff_batches,
             job_regexp=job_regexp,
             create_pipeline=create_pipeline,
             temp_branch=temp_branch,

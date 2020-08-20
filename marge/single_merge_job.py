@@ -89,7 +89,11 @@ class SingleMergeJob(MergeJob):
 
             try:
                 if trust:
-                    merge_request.accept(remove_branch=True, sha=actual_sha)
+                    merge_request.accept(
+                        remove_branch=merge_request.force_remove_source_branch,
+                        sha=actual_sha,
+                        merge_when_pipeline_succeeds=bool(target_project.only_allow_merge_if_pipeline_succeeds),
+                    )
                 else:
                     # Cannot accept the MR using the API, because it requires a passing pipeline
                     # but the pipeline associated to the MR cannot be trusted. Use manual merging

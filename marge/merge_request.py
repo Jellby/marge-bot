@@ -122,6 +122,10 @@ class MergeRequest(gitlab.Resource):
     def web_url(self):
         return self.info['web_url']
 
+    @property
+    def force_remove_source_branch(self):
+        return self.info['force_remove_source_branch']
+
     def refetch_info(self):
         self._info = self._api.call(GET('/projects/{0.project_id}/merge_requests/{0.iid}'.format(self)))
 
@@ -159,12 +163,12 @@ class MergeRequest(gitlab.Resource):
 
         raise TimeoutError('Waiting for merge request to be rebased by GitLab')
 
-    def accept(self, remove_branch=False, sha=None):
+    def accept(self, remove_branch=False, sha=None, merge_when_pipeline_succeeds=True):
         return self._api.call(PUT(
             '/projects/{0.project_id}/merge_requests/{0.iid}/merge'.format(self),
             dict(
                 should_remove_source_branch=remove_branch,
-                merge_when_pipeline_succeeds=True,
+                merge_when_pipeline_succeeds=merge_when_pipeline_succeeds,
                 sha=sha or self.sha,  # if provided, ensures what is merged is what we want (or fails)
             ),
         ))

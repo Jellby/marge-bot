@@ -87,6 +87,8 @@ optional arguments:
                            [env var: MARGE_ADD_TESTED] (default: False)
   --batch               Enable processing MRs in batches
                            [env var: MARGE_BATCH] (default: False)
+  --use-no-ff-batches      Disable fast forwarding when merging MR batches.
+                           [env var: MARGE_USE_NO_FF_BATCHES] (default: False)
   --add-part-of         Add "Part-of: <$MR_URL>" to each commit in MR.
                            [env var: MARGE_ADD_PART_OF] (default: False)
   --add-reviewers       Add "Reviewed-by: $approver" for each approver of MR to each commit in MR.
@@ -121,6 +123,9 @@ optional arguments:
   --branch-regexp BRANCH_REGEXP
                         Only process MRs whose target branches match the given regular expression.
                            [env var: MARGE_BRANCH_REGEXP] (default: .*)
+  --source-branch-regexp SOURCE_BRANCH_REGEXP
+                        Only process MRs whose source branches match the given regular expression.
+                           [env var: MARGE_SOURCE_BRANCH_REGEXP] (default: .*)
   --debug               Debug logging (includes all HTTP requests etc).
                            [env var: MARGE_DEBUG] (default: False)
 ```
@@ -129,7 +134,7 @@ Here is a config file example
 add-part-of: true
 add-reviewers: true
 add-tested: true
-# chose one way of specifying the Auth token
+# choose one way of specifying the Auth token
 #auth-token: TOKEN
 auth-token-file: token.FILE
 branch-regexp: .*
@@ -140,7 +145,7 @@ git-timeout: 120s
 gitlab-url: "https://gitlab.example.com"
 impersonate-approvers: true
 project-regexp: .*
-# chose one way of specifying the SSH key
+# choose one way of specifying the SSH key
 #ssh-key: KEY
 ssh-key-file: token.FILE
 ```

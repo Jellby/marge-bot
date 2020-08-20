@@ -201,6 +201,7 @@ class TestMergeJobOptions:
             embargo=marge.interval.IntervalUnion.empty(),
             ci_timeout=timedelta(minutes=15),
             fusion=Fusion.rebase,
+            use_no_ff_batches=False,
             job_regexp=re.compile(''),
             create_pipeline=False,
             temp_branch='',
