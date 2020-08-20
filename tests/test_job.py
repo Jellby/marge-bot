@@ -205,7 +205,6 @@ class TestMergeJobOptions:
             job_regexp=re.compile(''),
             create_pipeline=False,
             temp_branch='',
-            no_squash=False,
         )
 
     def test_default_ci_time(self):

@@ -37,7 +37,8 @@ class TestPipeline:
 
         result = Pipeline.pipelines_by_merge_request(project_id=1234, merge_request_iid=1, api=api)
         api.call.assert_called_once_with(GET(
-            '/projects/1234/merge_requests/1/pipelines',
+            '/projects/1234/pipelines',
+            {'ref': 'refs/merge-requests/1/head'},
         ))
         assert [pl.info for pl in result] == [pl2, pl1]
 

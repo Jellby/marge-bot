@@ -135,7 +135,6 @@ class MergeJob:
         return sha
 
     def get_mr_ci_status(self, merge_request, commit_sha=None):
-        temp_branch = self.opts.temp_branch
         if commit_sha is None:
             commit_sha = merge_request.sha
 
