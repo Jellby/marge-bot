@@ -49,8 +49,8 @@ class Pipeline(gitlab.Resource):
             }
         ))
         pipelines_info.sort(key=lambda pipeline_info: pipeline_info['id'], reverse=True)
-        pipelines_info.sort(key=lambda pipeline_info:
-            0 if pipeline_info['ref'].startswith('ref/merge_requests') else 1)
+        #pipelines_info.sort(key=lambda pipeline_info:
+        #    0 if pipeline_info['ref'].startswith('ref/merge_requests') else 1)
         return [cls(api, pipeline_info, project_id) for pipeline_info in pipelines_info]
 
     @classmethod

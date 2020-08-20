@@ -144,12 +144,7 @@ class MergeJob:
             if merge_request.sha != commit_sha:
                 raise CannotMerge('Someone pushed to branch while I was waiting for CI to pass.')
 
-        if temp_branch and merge_request.source_project_id != merge_request.target_project_id:
-            ref = temp_branch
-            pid = merge_request.target_project_id
-            self.update_temp_branch(merge_request, commit_sha)
-            pipelines = Pipeline.pipelines_by_branch(pid, ref, self._api)
-        elif self._api.version().release >= (10, 5, 0):
+        if self._api.version().release >= (10, 5, 0):
             ref = merge_request.iid
             pid = merge_request.target_project_id
             pipelines = Pipeline.pipelines_by_merge_request(pid, ref, self._api)
@@ -158,20 +153,6 @@ class MergeJob:
             pid = merge_request.source_project_id
             pipelines = Pipeline.pipelines_by_branch(pid, ref, self._api)
         current_pipeline = next(iter(pipeline for pipeline in pipelines if pipeline.sha == commit_sha), None)
-        if not current_pipeline:
-            message = 'No pipeline listed for {sha} on MR {iid}.'.format(
-                sha=commit_sha, iid=merge_request.iid
-            )
-            log.warning(message)
-            ref = merge_request.source_branch
-            pipelines = Pipeline.pipelines_by_branch(
-                merge_request.target_project_id,
-                ref,
-                self._api,
-            )
-            current_pipeline = next(
-                iter(pipeline for pipeline in pipelines if pipeline.sha == commit_sha), None
-            )
         create_pipeline = self.opts.create_pipeline
 
         trigger = False
